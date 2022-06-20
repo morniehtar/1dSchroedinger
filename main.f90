@@ -17,11 +17,13 @@ module config
     real(8), parameter :: xcrs = -0.456d0
 !---------------------------------------------------------------
 ! Energy effective infinity
-    real(8), parameter :: einf = 40.d0 ! >0
+    real(8), parameter :: einf = 800d0 ! >0
 ! Energy effective nought
-    real(8), parameter :: enou = 5.d-2 ! >0; 4.d-3 for U1
+    real(8), parameter :: enou = 600d0 ! >0; 4.d-3 for U1; 5.d-2 generally
 ! Machine epsilon (root search limiter)
     real(8), parameter :: eps = 1.d-8 ! 1.d-16 is machine epsilon
+! Machine infinity (WF normalization upper limiter)
+    real(8), parameter :: omg = 1d+300
 ! Energy search precision
     integer, parameter :: eprec = 80
 !---------------------------------------------------------------
@@ -37,8 +39,7 @@ module potent
         end function ufct
     end interface
 
-
-    procedure(U0), pointer :: uptr => U1
+    procedure(U0), pointer :: uptr => Yl
 
     real(8), parameter :: u = 10.d0
     !real(8), parameter :: u = 2.d0
@@ -339,7 +340,7 @@ contains
         procedure(fct), pointer :: fptr, gptr
         real(8), dimension(4) :: k, l
         real(8) :: arg, stp, zstore, ystore, C
-        integer :: i
+        integer :: i, j
 
         fptr => func
         gptr => gunc
@@ -364,6 +365,24 @@ contains
             k(4) = fptr(getWF(i,1)+stp, getWF(i,2)+k(3)*stp, zstore+k(3)*stp, nrg)
             l(4) = gptr(getWF(i,1)+stp, getWF(i,2)+l(3)*stp, zstore+l(3)*stp, nrg)
 
+            if (abs(getWF(i,2) + stp*(k(1)+2*k(2)+2*k(3)+k(4))/6) - omg .gt. 0) then
+                do j = 0, i
+                    getWF(j,2) = getWF(j,2)/getWF(i,2)
+                end do
+
+                k(1) = fptr(getWF(i,1), getWF(i,2), zstore, nrg)
+                l(1) = gptr(getWF(i,1), getWF(i,2), zstore, nrg)
+
+                k(2) = fptr(getWF(i,1)+stp/2, getWF(i,2)+k(1)*stp/2, zstore+k(1)*stp/2, nrg)
+                l(2) = gptr(getWF(i,1)+stp/2, getWF(i,2)+l(1)*stp/2, zstore+l(1)*stp/2, nrg)
+
+                k(3) = fptr(getWF(i,1)+stp/2, getWF(i,2)+k(2)*stp/2, zstore+k(2)*stp/2, nrg)
+                l(3) = gptr(getWF(i,1)+stp/2, getWF(i,2)+l(2)*stp/2, zstore+l(2)*stp/2, nrg)
+
+                k(4) = fptr(getWF(i,1)+stp, getWF(i,2)+k(3)*stp, zstore+k(3)*stp, nrg)
+                l(4) = gptr(getWF(i,1)+stp, getWF(i,2)+l(3)*stp, zstore+l(3)*stp, nrg)
+            end if
+
             if (i.ne.prec) getWF(i+1,2) = getWF(i,2) + stp*(k(1)+2*k(2)+2*k(3)+k(4))/6
             zstore = zstore + stp*(l(1)+2*l(2)+2*l(3)+l(4))/6
         end do
@@ -387,6 +406,24 @@ contains
             k(4) = fptr(getWF(i,1)-stp, getWF(i,2)-k(3)*stp, zstore-k(3)*stp, nrg)
             l(4) = gptr(getWF(i,1)-stp, getWF(i,2)-l(3)*stp, zstore-l(3)*stp, nrg)
 
+            if(abs(getWF(i,2) - stp*(k(1)+2*k(2)+2*k(3)+k(4))/6) - omg .gt. 0) then
+                do j = 2*prec, i, -1
+                    getWF(j,2) = getWF(j,2)/getWF(i,2)
+                end do
+
+                k(1) = fptr(getWF(i,1), getWF(i,2), zstore, nrg)
+                l(1) = gptr(getWF(i,1), getWF(i,2), zstore, nrg)
+
+                k(2) = fptr(getWF(i,1)-stp/2, getWF(i,2)-k(1)*stp/2, zstore-k(1)*stp/2, nrg)
+                l(2) = gptr(getWF(i,1)-stp/2, getWF(i,2)-l(1)*stp/2, zstore-l(1)*stp/2, nrg)
+
+                k(3) = fptr(getWF(i,1)-stp/2, getWF(i,2)-k(2)*stp/2, zstore-k(2)*stp/2, nrg)
+                l(3) = gptr(getWF(i,1)-stp/2, getWF(i,2)-l(2)*stp/2, zstore-l(2)*stp/2, nrg)
+
+                k(4) = fptr(getWF(i,1)-stp, getWF(i,2)-k(3)*stp, zstore-k(3)*stp, nrg)
+                l(4) = gptr(getWF(i,1)-stp, getWF(i,2)-l(3)*stp, zstore-l(3)*stp, nrg)
+            end if
+
             if (i.ne.(prec+1)) then
                 getWF(i-1,2) = getWF(i,2) - stp*(k(1)+2*k(2)+2*k(3)+k(4))/6
             else if (i.eq.(prec+1)) then
@@ -398,7 +435,7 @@ contains
 
     ! Scratch continuity fixing
         C = getWF(prec,2)/ystore
-        do i = prec, 2*prec
+        do i = prec+1, 2*prec
             getWF(i,2) = getWF(i,2)*C
         end do
 
