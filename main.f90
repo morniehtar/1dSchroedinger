@@ -3,16 +3,16 @@ module config
     public
 
 ! Integration precision (also wave function smoothness)
-    integer, parameter :: prec = 10001 ! 100000 is precise and fast
+    integer, parameter :: prec = 10000 ! 10000 works
 ! Cnd(erg) smoothness
     integer, parameter :: dots = 1000
 ! Threads count
     !integer, parameter :: thr = 4
 !---------------------------------------------------------------
 ! Effective infinity
-    real(8), parameter :: xinf = 10d0 ! U(x)~0 for x=10.d0
+    real(8), parameter :: xinf = 7d0 ! U(x)~0 for x=10.d0
 ! Cross-linking point
-    real(8), parameter :: xcrs = -0.456d0
+    real(8), parameter :: xcrs = +0.2d0
 !---------------------------------------------------------------
 ! Energy effective infinity
     real(8), parameter :: einf = 10d0 ! >0
@@ -37,7 +37,7 @@ module potent
         end function ufct
     end interface
 
-    procedure(U0), pointer :: uptr => U0
+    procedure(U0), pointer :: uptr => U1
 
     real(8), parameter :: u = 10d0
     !real(8), parameter :: u = 2d0
@@ -186,8 +186,8 @@ contains
 
         step = (xcrs + xinf) / prec
 
-        do i = 1, prec+1
-            x = -xinf + (i-1)*step
+        do i = 0, prec-1
+            x = -xinf + i*step
 
             k(1) = fptr(x, yleft, zleft, nrg)
             l(1) = gptr(x, yleft, zleft, nrg)
@@ -234,8 +234,8 @@ contains
 
         step = (xinf - xcrs) / prec
 
-        do i = 1, prec+1
-            x = xinf - (i-1)*step
+        do i = 0, prec-1
+            x = xinf - i*step
 
             k(1) = fptr(x, yright, zright, nrg)
             l(1) = gptr(x, yright, zright, nrg)
@@ -339,16 +339,16 @@ contains
         procedure(fct), pointer :: fptr, gptr
         real(8), dimension(4) :: k, l
         real(8) :: stp, zstore, ystore, C
-        integer :: i, j
+        integer :: i
 
         fptr => func
         gptr => gunc
 
-    ! Drawing WF scratch
+    ! Calculate left-side WF
         getWF(0,2) = exp(-sqrt(-2d0*nrg)*xinf)
         zstore = sqrt(-2d0*nrg)*exp(-sqrt(-2d0*nrg)*xinf)
 
-        stp = (xcrs + xinf) / prec
+        stp = abs(xcrs +  xinf) / prec
         do i = 0, prec
             getWF(i,1) = -xinf + i*stp
 
@@ -364,33 +364,18 @@ contains
             k(4) = fptr(getWF(i,1)+stp, getWF(i,2)+k(3)*stp, zstore+k(3)*stp, nrg)
             l(4) = gptr(getWF(i,1)+stp, getWF(i,2)+l(3)*stp, zstore+l(3)*stp, nrg)
 
-            if (abs(getWF(i,2) + stp*(k(1)+2*k(2)+2*k(3)+k(4))/6) - omg .gt. 0) then
-                do j = 0, i
-                    getWF(j,2) = getWF(j,2)/getWF(i,2)
-                end do
-                zstore = zstore/getWF(i,2)
+            if (i.ne.prec) getWF(i+1,2) = getWF(i,2) + stp*(k(1)+2*k(2)+2*k(3)+k(4))/6d0
+            zstore = zstore + stp*(l(1)+2*l(2)+2*l(3)+l(4))/6d0
 
-                k(1) = fptr(getWF(i,1), getWF(i,2), zstore, nrg)
-                l(1) = gptr(getWF(i,1), getWF(i,2), zstore, nrg)
-
-                k(2) = fptr(getWF(i,1)+stp/2, getWF(i,2)+k(1)*stp/2, zstore+k(1)*stp/2, nrg)
-                l(2) = gptr(getWF(i,1)+stp/2, getWF(i,2)+l(1)*stp/2, zstore+l(1)*stp/2, nrg)
-
-                k(3) = fptr(getWF(i,1)+stp/2, getWF(i,2)+k(2)*stp/2, zstore+k(2)*stp/2, nrg)
-                l(3) = gptr(getWF(i,1)+stp/2, getWF(i,2)+l(2)*stp/2, zstore+l(2)*stp/2, nrg)
-
-                k(4) = fptr(getWF(i,1)+stp, getWF(i,2)+k(3)*stp, zstore+k(3)*stp, nrg)
-                l(4) = gptr(getWF(i,1)+stp, getWF(i,2)+l(3)*stp, zstore+l(3)*stp, nrg)
-            end if
-
-            if (i.ne.prec) getWF(i+1,2) = getWF(i,2) + stp*(k(1)+2*k(2)+2*k(3)+k(4))/6
-            zstore = zstore + stp*(l(1)+2*l(2)+2*l(3)+l(4))/6
         end do
 
+        ystore = getWF(prec,2)
+
+    ! Calculate right-side WF
         getWF(2*prec,2) = exp(-sqrt(-2d0*nrg)*xinf)
         zstore = -sqrt(-2d0*nrg)*exp(-sqrt(-2d0*nrg)*xinf)
 
-        stp = (xinf - xcrs) / prec
+        stp = abs(xinf - xcrs) / prec
         do i = 2*prec, prec, -1
             getWF(i,1) = xinf - (2*prec-i)*stp
 
@@ -406,47 +391,24 @@ contains
             k(4) = fptr(getWF(i,1)-stp, getWF(i,2)-k(3)*stp, zstore-k(3)*stp, nrg)
             l(4) = gptr(getWF(i,1)-stp, getWF(i,2)-l(3)*stp, zstore-l(3)*stp, nrg)
 
-            if(abs(getWF(i,2) - stp*(k(1)+2*k(2)+2*k(3)+k(4))/6) - omg .gt. 0) then
-                do j = 2*prec, i, -1
-                    getWF(j,2) = getWF(j,2)/getWF(i,2)
-                end do
-                zstore = zstore/getWF(i,2)
-
-                k(1) = fptr(getWF(i,1), getWF(i,2), zstore, nrg)
-                l(1) = gptr(getWF(i,1), getWF(i,2), zstore, nrg)
-
-                k(2) = fptr(getWF(i,1)-stp/2, getWF(i,2)-k(1)*stp/2, zstore-k(1)*stp/2, nrg)
-                l(2) = gptr(getWF(i,1)-stp/2, getWF(i,2)-l(1)*stp/2, zstore-l(1)*stp/2, nrg)
-
-                k(3) = fptr(getWF(i,1)-stp/2, getWF(i,2)-k(2)*stp/2, zstore-k(2)*stp/2, nrg)
-                l(3) = gptr(getWF(i,1)-stp/2, getWF(i,2)-l(2)*stp/2, zstore-l(2)*stp/2, nrg)
-
-                k(4) = fptr(getWF(i,1)-stp, getWF(i,2)-k(3)*stp, zstore-k(3)*stp, nrg)
-                l(4) = gptr(getWF(i,1)-stp, getWF(i,2)-l(3)*stp, zstore-l(3)*stp, nrg)
-            end if
-
-            if (i.ne.(prec+1)) then
-                getWF(i-1,2) = getWF(i,2) - stp*(k(1)+2*k(2)+2*k(3)+k(4))/6
-            else if (i.eq.(prec+1)) then
-                ystore = getWF(i,2) - stp*(k(1)+2*k(2)+2*k(3)+k(4))/6
-            end if
+            if (i.ne.prec) getWF(i-1,2) = getWF(i,2) - stp*(k(1)+2*k(2)+2*k(3)+k(4))/6
             zstore = zstore - stp*(l(1)+2*l(2)+2*l(3)+l(4))/6
 
         end do
 
-    ! Scratch continuity fixing
+    ! Raw data continuity fixing
         C = getWF(prec,2)/ystore
-        do i = prec+1, 2*prec
+        do i = 0, prec-1
             getWF(i,2) = getWF(i,2)*C
         end do
 
-    ! Scratch normalization fixing
+    ! Raw data normalization fixing
         C = discrItgr(getWF**2)
         do i = 0, 2*prec
             getWF(i,2) = getWF(i,2)/C
         end do
 
-        print*, "WF is drawn"
+        print*, "WF is retrieved"
     end function getWF
 
     real(8) function discrItgr(farr)
