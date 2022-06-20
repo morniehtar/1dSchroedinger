@@ -6,26 +6,26 @@ module config
     implicit none
     public
 
-    !Integration precision (also affects smoothness)
+! Integration precision (also wave function smoothness)
     integer, parameter :: prec = 10000 ! 100000 is precise and fast
-    !Draw smoothness
+! Cnd(erg) smoothness
     integer, parameter :: dots = 1000
-    !Threads count
+! Threads count
     !integer, parameter :: thr = 4
 !---------------------------------------------------------------
-    !Effective infinity
+! Effective infinity
     real(8), parameter :: xinf = 10.d0 ! U(x)~0 for x=10.d0
-    !Cross-linking point
+! Cross-linking point
     real(8), parameter :: xcrs = -0.456d0
 !---------------------------------------------------------------
-    !Energy effective infinity
-    real(8), parameter :: einf = 800.d0 ! >0
-    !Energy effective nought
+! Energy effective infinity
+    real(8), parameter :: einf = 40.d0 ! >0
+! Energy effective nought
     real(8), parameter :: enou = 5.d-2 ! >0; 4.d-3 for U1
-    !Machine epsilon (root search limiter)
+! Machine epsilon (root search limiter)
     real(8), parameter :: eps = 1.d-8 ! 1.d-16 is machine epsilon
-    !Energy search precision
-    integer, parameter :: eprec = 2000
+! Energy search precision
+    integer, parameter :: eprec = 80
 !---------------------------------------------------------------
 end module config
 
@@ -42,7 +42,7 @@ module potent
 
     procedure(U0), pointer :: uptr => U1
 
-    real(8), parameter :: u = 1.d1
+    real(8), parameter :: u = 10.d0
     !real(8), parameter :: u = 2.d0
     !real(8), parameter :: u = 1.1d0
 
@@ -80,7 +80,7 @@ program main
     real(8) :: bt, tp, estep
     real(8), dimension(:), allocatable :: stErg
 
-    integer :: i, k
+    integer :: i
 
     abstract interface
         real(8) function cnd(nrg)
@@ -114,6 +114,7 @@ program main
     end do
 
 
+    deallocate(stErg)
 contains
 
     real(8) function cndLog(nrg)
@@ -274,7 +275,7 @@ contains
         integer :: j
 
         if (fptr(bt)*fptr(tp).gt.0) return
-        call extend(arr)
+        call ext(arr)
 
         md = (tp + bt) / 2
         j = 0
@@ -292,7 +293,7 @@ contains
         print *, "(k =", size(arr), ") E =", md, j , "steps"
     end subroutine getRoot
 
-    subroutine extend(arr)
+    subroutine ext(arr)
         implicit none
         real(8), dimension(:), intent(inout), allocatable :: arr
 
@@ -312,6 +313,6 @@ contains
         do j = 1, k
             arr(j) = tmp(j)
         end do
-    end subroutine extend
+    end subroutine ext
 
 end program main
