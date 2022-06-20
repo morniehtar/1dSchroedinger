@@ -1,20 +1,31 @@
+!Поиск корней
+!Нормировка в.ф.
+!Отрисовка в.ф.
+
 module config
     implicit none
     public
 
     !Integration precision (also affects smoothness)
-    integer, parameter :: dots = 1000 ! 100000 is precise and fast
+    integer, parameter :: prec = 10000 ! 100000 is precise and fast
+    !Draw smoothness
+    integer, parameter :: dots = 1000
+    !Threads count
+    !integer, parameter :: thr = 4
 !---------------------------------------------------------------
     !Effective infinity
-    real(8), parameter :: xinf = 10.d0 ! Epsilon is 1.d-16, U(x)~0 for x=10.d0
+    real(8), parameter :: xinf = 10.d0 ! U(x)~0 for x=10.d0
     !Cross-linking point
-    real(8), parameter :: xcrs = -0.5d0
-    !Energy seeking break limit
-    real(8), parameter :: einf = 10.d0
-    !Machine epsilon (bisection limiter)
-    real(8), parameter :: eps = 1.d-9
-    !Energy search width
-    real(8), parameter :: eprec = 1.d0
+    real(8), parameter :: xcrs = -0.456d0
+!---------------------------------------------------------------
+    !Energy effective infinity
+    real(8), parameter :: einf = 10.d0 ! >0
+    !Energy effective nought
+    real(8), parameter :: enou = 4.d-3 ! >0; 4.d-3 for U1
+    !Machine epsilon (root search limiter)
+    real(8), parameter :: eps = 1.d-8 ! 1.d-16 is machine epsilon
+    !Energy search precision
+    integer, parameter :: eprec = 60
 !---------------------------------------------------------------
 end module config
 
@@ -28,29 +39,35 @@ module potent
         end function ufct
     end interface
 
-    !Current U(x) function
-    procedure(U0), pointer :: uptr => U1
+
+    procedure(U0), pointer :: uptr => U0
+
+    real(8), parameter :: u = 1.d1
+    !real(8), parameter :: u = 2.d0
+    !real(8), parameter :: u = 1.1d0
+
 
 contains
 
     pure real(8) function U0(x)
         implicit none
         real(8), intent(in) :: x
-        U0 = - 1.1d0/cosh(x)
+        U0 = - u/cosh(x)
     end function U0
 
     pure real(8) function U1(x)
         implicit none
         real(8), intent(in) :: x
-        U1 = - 1.1d0/(cosh(x)**2)
+        U1 = - u/(cosh(x)**2)
     end function U1
 
-    pure real(8) function U2(r)
+    pure real(8) function Y(r)
         implicit none
         real(8), intent(in) :: r
         real(8), parameter :: g = 2.d0
-        U2 = - g*exp(-r)/r
-    end function U2
+        integer, parameter :: l = 0
+        Y = - g*exp(-r)/r + 2.d-1*l*(l+1)/(r**2)
+    end function Y
 
 end module potent
 
@@ -59,48 +76,68 @@ program main
     use potent
     implicit none
 
-    !Placeholders for function values around cross-section
-    real(8) :: yleft, zleft, yright, zright
-    !Energy handling variables
-    real(8) :: erg, estep
-    !Bisection variables
-    real(8) :: bt, md, tp
-    integer :: i, lim
+    real(8) :: erg, stp
+    real(8) :: bt, tp, estep
 
-    estep = einf/eprec
+    integer :: i, k
 
-    do i = 1, eprec+1
+    abstract interface
+        real(8) function cnd(nrg)
+        real(8), intent(in) :: nrg
+        end function cnd
+    end interface
+
+    procedure(cnd), pointer :: cndPtr
+
+    !vvvvvvvvvvvvvvv
+    cndPtr => cndWron ! cndLog doesn't work at all with finding roots (why?!)
+    !^^^^^^^^^^^^^^^
+
+    stp = (einf-enou)/dots
+    open(unit = 1, file = "cndPlot.dat")
+    do i = 1, dots+1
+        erg = -einf + (i-1)*stp
+        write(1, *) erg, cndPtr(erg)
+    end do
+    close(1)
+    print *, "Cnd(erg) is drawn"
+
+    k=0
+    estep = (einf-enou)/eprec
+    do i = 1, eprec
         bt = -einf + (i-1)*estep
         tp = -einf + i*estep
-        md = (tp + bt) / 2
-        do while (1==0)
-
-        end do
-
+        call getRoot(cndPtr, bt, tp, k)
     end do
-    call integL(erg, yleft, zleft)
-    call integR(erg, yright, zright)
 
-    print *, cndWron(-0.5d0)
+    !print *, cndWron(-1.5d0)
 
 contains
 
     real(8) function cndLog(nrg)
         implicit none
+
         real(8), intent(in) :: nrg
         real(8) :: yleft, zleft, yright, zright
+
         call integL(nrg, yleft, zleft)
         call integR(nrg, yright, zright)
+
         cndLog = zright/yright - zleft/yleft
+
     end function cndLog
 
     real(8) function cndWron(nrg)
         implicit none
+
         real(8), intent(in) :: nrg
         real(8) :: yleft, zleft, yright, zright
+
         call integL(nrg, yleft, zleft)
         call integR(nrg, yright, zright)
-        cndWron = yleft*zright - zleft*zright
+
+        cndWron = yleft*zright - zleft*yright
+
     end function cndWron
 
     !y'=func(x, y, z); y = psi
@@ -126,10 +163,16 @@ contains
         real(8), intent(inout) :: yleft, zleft
         real(8), intent(in) :: nrg
 
-        procedure(gunc), pointer :: fptr, gptr
+        abstract interface
+            real(8) function fct(x, y, z, nrg)
+            real(8), intent(in) :: x, y, z, nrg
+            end function fct
+        end interface
+
+        procedure(fct), pointer :: fptr, gptr
         real(8), dimension(4) :: k, l
         real(8) :: x, step
-        integer :: i, j
+        integer :: i
 
         fptr => func
         gptr => gunc
@@ -137,10 +180,10 @@ contains
         yleft = exp(-sqrt(-2.d0*nrg)*xinf)
         zleft = sqrt(-2.d0*nrg)*exp(-sqrt(-2.d0*nrg)*xinf)
 
-        step = (xcrs + xinf) / dots
+        step = (xcrs + xinf) / prec
 
         !open(unit = 1, file = "rkLeft.dat")
-        do i = 1, dots+1
+        do i = 1, prec+1
             x = -xinf + (i-1)*step
             !write(1,*) x, yleft, zleft
             k(1) = fptr(x, yleft, zleft, nrg)
@@ -170,21 +213,27 @@ contains
         real(8), intent(inout) :: yright, zright
         real(8), intent(in) :: nrg
 
-        procedure(gunc), pointer :: fptr, gptr
+        abstract interface
+            real(8) function fct(x, y, z, nrg)
+            real(8), intent(in) :: x, y, z, nrg
+            end function fct
+        end interface
+
+        procedure(fct), pointer :: fptr, gptr
         real(8), dimension(4) :: k, l
         real(8) :: x, step
-        integer :: i, j
+        integer :: i
 
         fptr => func
         gptr => gunc
 
         yright = exp(-sqrt(-2.d0*nrg)*xinf)
-        zright = sqrt(-2.d0*nrg)*exp(-sqrt(-2.d0*nrg)*xinf)
+        zright = -sqrt(-2.d0*nrg)*exp(-sqrt(-2.d0*nrg)*xinf)
 
-        step = (xinf - xcrs) / dots
+        step = (xinf - xcrs) / prec
 
         !open(unit = 1, file = "rkRight.dat")
-        do i = 1, dots+1
+        do i = 1, prec+1
             x = xinf - (i-1)*step
             !write(1,*) x, yright, zright
             k(1) = fptr(x, yright, zright, nrg)
@@ -206,5 +255,38 @@ contains
         !close(1)
 
     end subroutine integR
+
+    subroutine getRoot(fptr, bt, tp, k)
+        implicit none
+
+        abstract interface
+            real(8) function fct(x)
+            real(8), intent(in) :: x
+            end function fct
+        end interface
+
+        procedure(fct), pointer, intent(in) :: fptr
+        real(8), intent(inout) :: bt, tp
+        integer, intent(inout) :: k
+        real(8) :: md
+        integer :: j
+
+        if (fptr(bt)*fptr(tp).gt.0) return
+        k = k+1
+
+        md = (tp + bt) / 2
+        j = 0
+        do while ((abs(fptr(md)).gt.eps).and.((tp-bt).gt.eps))
+            md = (tp + bt) / 2
+            if (fptr(bt) * fptr(md) .gt. 0) then
+                bt = md
+            else if (fptr(bt) * fptr(md) .lt. 0) then
+                tp = md
+            end if
+            j = j + 1
+        end do
+
+        print *, "(k =", k, ") E =", md, j , "steps"
+    end subroutine getRoot
 
 end program main
