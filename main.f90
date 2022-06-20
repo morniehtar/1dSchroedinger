@@ -19,13 +19,13 @@ module config
     real(8), parameter :: xcrs = -0.456d0
 !---------------------------------------------------------------
     !Energy effective infinity
-    real(8), parameter :: einf = 10.d0 ! >0
+    real(8), parameter :: einf = 800.d0 ! >0
     !Energy effective nought
-    real(8), parameter :: enou = 4.d-3 ! >0; 4.d-3 for U1
+    real(8), parameter :: enou = 5.d-2 ! >0; 4.d-3 for U1
     !Machine epsilon (root search limiter)
     real(8), parameter :: eps = 1.d-8 ! 1.d-16 is machine epsilon
     !Energy search precision
-    integer, parameter :: eprec = 60
+    integer, parameter :: eprec = 2000
 !---------------------------------------------------------------
 end module config
 
@@ -40,7 +40,7 @@ module potent
     end interface
 
 
-    procedure(U0), pointer :: uptr => U0
+    procedure(U0), pointer :: uptr => U1
 
     real(8), parameter :: u = 1.d1
     !real(8), parameter :: u = 2.d0
@@ -61,13 +61,13 @@ contains
         U1 = - u/(cosh(x)**2)
     end function U1
 
-    pure real(8) function Y(r)
+    pure real(8) function Yl(r)
         implicit none
         real(8), intent(in) :: r
-        real(8), parameter :: g = 2.d0
+        real(8), parameter :: g = 40.d0
         integer, parameter :: l = 0
-        Y = - g*exp(-r)/r + 2.d-1*l*(l+1)/(r**2)
-    end function Y
+        Yl = - g*exp(-r)/r + 5.d-1*l*(l+1)/r**2
+    end function Yl
 
 end module potent
 
@@ -78,6 +78,7 @@ program main
 
     real(8) :: erg, stp
     real(8) :: bt, tp, estep
+    real(8), dimension(:), allocatable :: stErg
 
     integer :: i, k
 
@@ -90,9 +91,10 @@ program main
     procedure(cnd), pointer :: cndPtr
 
     !vvvvvvvvvvvvvvv
-    cndPtr => cndWron ! cndLog doesn't work at all with finding roots (why?!)
+    cndPtr => cndWron
     !^^^^^^^^^^^^^^^
 
+! Drawing cnd(erg)
     stp = (einf-enou)/dots
     open(unit = 1, file = "cndPlot.dat")
     do i = 1, dots+1
@@ -102,15 +104,15 @@ program main
     close(1)
     print *, "Cnd(erg) is drawn"
 
-    k=0
+! Searching stationary levels
+    allocate(stErg(0))
     estep = (einf-enou)/eprec
     do i = 1, eprec
         bt = -einf + (i-1)*estep
         tp = -einf + i*estep
-        call getRoot(cndPtr, bt, tp, k)
+        call getRoot(cndPtr, bt, tp, stErg)
     end do
 
-    !print *, cndWron(-1.5d0)
 
 contains
 
@@ -256,7 +258,7 @@ contains
 
     end subroutine integR
 
-    subroutine getRoot(fptr, bt, tp, k)
+    subroutine getRoot(fptr, bt, tp, arr)
         implicit none
 
         abstract interface
@@ -267,12 +269,12 @@ contains
 
         procedure(fct), pointer, intent(in) :: fptr
         real(8), intent(inout) :: bt, tp
-        integer, intent(inout) :: k
+        real(8), dimension(:), intent(inout), allocatable :: arr
         real(8) :: md
         integer :: j
 
         if (fptr(bt)*fptr(tp).gt.0) return
-        k = k+1
+        call extend(arr)
 
         md = (tp + bt) / 2
         j = 0
@@ -286,7 +288,30 @@ contains
             j = j + 1
         end do
 
-        print *, "(k =", k, ") E =", md, j , "steps"
+        arr(size(arr)) = md
+        print *, "(k =", size(arr), ") E =", md, j , "steps"
     end subroutine getRoot
+
+    subroutine extend(arr)
+        implicit none
+        real(8), dimension(:), intent(inout), allocatable :: arr
+
+
+        real(8), dimension(size(arr)) :: tmp
+        integer :: j, k
+
+        k = size(arr)
+
+        do j = 1, k
+            tmp(j) = arr(j)
+        end do
+
+        deallocate(arr)
+        allocate(arr(k+1))
+
+        do j = 1, k
+            arr(j) = tmp(j)
+        end do
+    end subroutine extend
 
 end program main
