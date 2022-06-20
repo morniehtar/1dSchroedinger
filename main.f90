@@ -3,7 +3,7 @@ module config
     public
 
 ! Integration precision (also wave function smoothness)
-    integer, parameter :: prec = 10002 ! 100000 is precise and fast
+    integer, parameter :: prec = 10001 ! 100000 is precise and fast
 ! Cnd(erg) smoothness
     integer, parameter :: dots = 1000
 ! Threads count
@@ -15,9 +15,9 @@ module config
     real(8), parameter :: xcrs = -0.456d0
 !---------------------------------------------------------------
 ! Energy effective infinity
-    real(8), parameter :: einf = 800d0 ! >0
+    real(8), parameter :: einf = 40d0 ! >0
 ! Energy effective nought
-    real(8), parameter :: enou = 600d0 ! >0; 4d-3 for U1; 5d-2 generally
+    real(8), parameter :: enou = 4d-3 ! >0; 4d-3 for U1; 5d-2 generally
 ! Machine epsilon (root search limiter)
     real(8), parameter :: eps = 1d-8 ! 1d-16 is machine epsilon
 ! Machine infinity (WF normalization upper limiter)
@@ -37,7 +37,7 @@ module potent
         end function ufct
     end interface
 
-    procedure(U0), pointer :: uptr => Yl
+    procedure(U0), pointer :: uptr => U1
 
     real(8), parameter :: u = 10d0
     !real(8), parameter :: u = 2d0
@@ -105,7 +105,7 @@ program main
     end do
 
 ! WF output
-    WF=getWF(stErg(1))
+    WF=getWF(stErg(4))
     open(unit = 1, file = "wfscratch.dat")
     do i = 0, 2*prec
         write(1,*) WF(i, 1), WF(i, 2)
@@ -182,7 +182,6 @@ contains
         zleft = sqrt(-2d0*nrg)*exp(-sqrt(-2d0*nrg)*xinf)
 
         step = (xcrs + xinf) / prec
-
 
         do i = 1, prec+1
             x = -xinf + (i-1)*step
@@ -455,8 +454,9 @@ contains
         discrItgr = 0
         er = 0
         if (mod(prec, 3).eq.0) then
+
             stp = farr(1,1) - farr(0,1)
-            do i = 0, prec, 3
+            do i = 0, prec-3, 3
                 next = (3*stp/8)*(farr(i,2)+3*farr(i+1,2)+3*farr(i+2,2)+farr(i+3,2)) - er
                 sres = discrItgr + next
                 er = (sres - discrItgr) - next
@@ -464,21 +464,23 @@ contains
             end do
 
             stp = farr(prec+1,1) - farr(prec,1)
-            do i = prec, 2*prec, 3
+            do i = prec, 2*prec-3, 3
                 next = (3*stp/8)*(farr(i,2)+3*farr(i+1,2)+3*farr(i+2,2)+farr(i+3,2)) - er
                 sres = discrItgr + next
                 er = (sres - discrItgr) - next
                 discrItgr = sres
             end do
+
         elseif (mod(prec, 3).eq.1) then
+
             stp = farr(1,1) - farr(0,1)
-            do i = 0, prec-4, 3
+            do i = 0, prec-7, 3
                 next = (3*stp/8)*(farr(i,2)+3*farr(i+1,2)+3*farr(i+2,2)+farr(i+3,2)) - er
                 sres = discrItgr + next
                 er = (sres - discrItgr) - next
                 discrItgr = sres
             end do
-            do i = prec-4, prec, 2
+            do i = prec-4, prec-2, 2
                 next = (stp/3)*(farr(i,2)+4*farr(i+1,2)+farr(i+2,2)) - er
                 sres = discrItgr + next
                 er = (sres - discrItgr) - next
@@ -486,46 +488,45 @@ contains
             end do
 
             stp = farr(prec+1,1) - farr(prec,1)
-            do i = prec, 2*prec-4, 3
+            do i = prec, 2*prec-7, 3
                 next = (3*stp/8)*(farr(i,2)+3*farr(i+1,2)+3*farr(i+2,2)+farr(i+3,2)) - er
                 sres = discrItgr + next
                 er = (sres - discrItgr) - next
                 discrItgr = sres
             end do
-            do i = 2*prec-4, 2*prec, 2
+            do i = 2*prec-4, 2*prec-2, 2
                 next = (stp/3)*(farr(i,2)+4*farr(i+1,2)+farr(i+2,2)) - er
                 sres = discrItgr + next
                 er = (sres - discrItgr) - next
                 discrItgr = sres
             end do
+
         elseif (mod(prec, 3).eq.2) then
+
             stp = farr(1,1) - farr(0,1)
-            do i = 0, prec-2, 3
+            do i = 0, prec-5, 3
                 next = (3*stp/8)*(farr(i,2)+3*farr(i+1,2)+3*farr(i+2,2)+farr(i+3,2)) - er
                 sres = discrItgr + next
                 er = (sres - discrItgr) - next
                 discrItgr = sres
             end do
-            do i = prec-2, prec, 2
-                next = (stp/3)*(farr(i,2)+4*farr(i+1,2)+farr(i+2,2)) - er
-                sres = discrItgr + next
-                er = (sres - discrItgr) - next
-                discrItgr = sres
-            end do
+            next = (stp/3)*(farr(prec-2,2)+4*farr(prec-1,2)+farr(prec,2)) - er
+            sres = discrItgr + next
+            er = (sres - discrItgr) - next
+            discrItgr = sres
 
             stp = farr(prec+1,1) - farr(prec,1)
-            do i = prec, 2*prec-2, 3
+            do i = prec, 2*prec-5, 3
                 next = (3*stp/8)*(farr(i,2)+3*farr(i+1,2)+3*farr(i+2,2)+farr(i+3,2)) - er
                 sres = discrItgr + next
                 er = (sres - discrItgr) - next
                 discrItgr = sres
             end do
-            do i = 2*prec-2, 2*prec, 2
-                next = (stp/3)*(farr(i,2)+4*farr(i+1,2)+farr(i+2,2)) - er
-                sres = discrItgr + next
-                er = (sres - discrItgr) - next
-                discrItgr = sres
-            end do
+            next = (stp/3)*(farr(2*prec-2,2)+4*farr(2*prec-1,2)+farr(2*prec,2)) - er
+            sres = discrItgr + next
+            er = (sres - discrItgr) - next
+            discrItgr = sres
+
         end if
     end function discrItgr
 
