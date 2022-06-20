@@ -1,29 +1,27 @@
-!Нормировка в.ф.
-
 module config
     implicit none
     public
 
 ! Integration precision (also wave function smoothness)
-    integer, parameter :: prec = 10000 ! 100000 is precise and fast
+    integer, parameter :: prec = 10002 ! 100000 is precise and fast
 ! Cnd(erg) smoothness
     integer, parameter :: dots = 1000
 ! Threads count
     !integer, parameter :: thr = 4
 !---------------------------------------------------------------
 ! Effective infinity
-    real(8), parameter :: xinf = 10.d0 ! U(x)~0 for x=10.d0
+    real(8), parameter :: xinf = 10d0 ! U(x)~0 for x=10.d0
 ! Cross-linking point
     real(8), parameter :: xcrs = -0.456d0
 !---------------------------------------------------------------
 ! Energy effective infinity
     real(8), parameter :: einf = 800d0 ! >0
 ! Energy effective nought
-    real(8), parameter :: enou = 600d0 ! >0; 4.d-3 for U1; 5.d-2 generally
+    real(8), parameter :: enou = 600d0 ! >0; 4d-3 for U1; 5d-2 generally
 ! Machine epsilon (root search limiter)
-    real(8), parameter :: eps = 1.d-8 ! 1.d-16 is machine epsilon
+    real(8), parameter :: eps = 1d-8 ! 1d-16 is machine epsilon
 ! Machine infinity (WF normalization upper limiter)
-    real(8), parameter :: omg = 1d+300
+    real(8), parameter :: omg = 1d+300 ! 1d+308 is machine infinity
 ! Energy search precision
     integer, parameter :: eprec = 80
 !---------------------------------------------------------------
@@ -41,8 +39,8 @@ module potent
 
     procedure(U0), pointer :: uptr => Yl
 
-    real(8), parameter :: u = 10.d0
-    !real(8), parameter :: u = 2.d0
+    real(8), parameter :: u = 10d0
+    !real(8), parameter :: u = 2d0
     !real(8), parameter :: u = 1.1d0
 
 
@@ -63,7 +61,7 @@ contains
     pure real(8) function Yl(r)
         implicit none
         real(8), intent(in) :: r
-        real(8), parameter :: g = 40.d0
+        real(8), parameter :: g = 40d0
         integer, parameter :: l = 0
         Yl = - g*exp(-r)/r + 5.d-1*l*(l+1)/r**2
     end function Yl
@@ -106,7 +104,7 @@ program main
         call getRoot(cndPtr, bt, tp, stErg)
     end do
 
-! WFscratch output (temporary)
+! WF output
     WF=getWF(stErg(1))
     open(unit = 1, file = "wfscratch.dat")
     do i = 0, 2*prec
@@ -180,8 +178,8 @@ contains
         fptr => func
         gptr => gunc
 
-        yleft = exp(-sqrt(-2.d0*nrg)*xinf)
-        zleft = sqrt(-2.d0*nrg)*exp(-sqrt(-2.d0*nrg)*xinf)
+        yleft = exp(-sqrt(-2d0*nrg)*xinf)
+        zleft = sqrt(-2d0*nrg)*exp(-sqrt(-2d0*nrg)*xinf)
 
         step = (xcrs + xinf) / prec
 
@@ -229,11 +227,10 @@ contains
         fptr => func
         gptr => gunc
 
-        yright = exp(-sqrt(-2.d0*nrg)*xinf)
-        zright = -sqrt(-2.d0*nrg)*exp(-sqrt(-2.d0*nrg)*xinf)
+        yright = exp(-sqrt(-2d0*nrg)*xinf)
+        zright = -sqrt(-2d0*nrg)*exp(-sqrt(-2d0*nrg)*xinf)
 
         step = (xinf - xcrs) / prec
-
 
         do i = 1, prec+1
             x = xinf - (i-1)*step
@@ -339,15 +336,15 @@ contains
 
         procedure(fct), pointer :: fptr, gptr
         real(8), dimension(4) :: k, l
-        real(8) :: arg, stp, zstore, ystore, C
+        real(8) :: stp, zstore, ystore, C
         integer :: i, j
 
         fptr => func
         gptr => gunc
 
     ! Drawing WF scratch
-        getWF(0,2) = exp(-sqrt(-2.d0*nrg)*xinf)
-        zstore = sqrt(-2.d0*nrg)*exp(-sqrt(-2.d0*nrg)*xinf)
+        getWF(0,2) = exp(-sqrt(-2d0*nrg)*xinf)
+        zstore = sqrt(-2d0*nrg)*exp(-sqrt(-2d0*nrg)*xinf)
 
         stp = (xcrs + xinf) / prec
         do i = 0, prec
@@ -387,8 +384,8 @@ contains
             zstore = zstore + stp*(l(1)+2*l(2)+2*l(3)+l(4))/6
         end do
 
-        getWF(2*prec,2) = exp(-sqrt(-2.d0*nrg)*xinf)
-        zstore = -sqrt(-2.d0*nrg)*exp(-sqrt(-2.d0*nrg)*xinf)
+        getWF(2*prec,2) = exp(-sqrt(-2d0*nrg)*xinf)
+        zstore = -sqrt(-2d0*nrg)*exp(-sqrt(-2d0*nrg)*xinf)
 
         stp = (xinf - xcrs) / prec
         do i = 2*prec, prec, -1
@@ -440,9 +437,96 @@ contains
         end do
 
     ! Scratch normalization fixing
-        ! (Yet to be added)
+        C = discrItgr(getWF**2)
+        do i = 0, 2*prec
+            getWF(i,2) = getWF(i,2)/C
+        end do
 
         print*, "WF is drawn"
     end function getWF
+
+    real(8) function discrItgr(farr)
+        implicit none
+        real(8), dimension(0:2*prec,2), intent(in) :: farr
+
+        real(8) :: sres, er, next, stp
+        integer :: i
+
+        discrItgr = 0
+        er = 0
+        if (mod(prec, 3).eq.0) then
+            stp = farr(1,1) - farr(0,1)
+            do i = 0, prec, 3
+                next = (3*stp/8)*(farr(i,2)+3*farr(i+1,2)+3*farr(i+2,2)+farr(i+3,2)) - er
+                sres = discrItgr + next
+                er = (sres - discrItgr) - next
+                discrItgr = sres
+            end do
+
+            stp = farr(prec+1,1) - farr(prec,1)
+            do i = prec, 2*prec, 3
+                next = (3*stp/8)*(farr(i,2)+3*farr(i+1,2)+3*farr(i+2,2)+farr(i+3,2)) - er
+                sres = discrItgr + next
+                er = (sres - discrItgr) - next
+                discrItgr = sres
+            end do
+        elseif (mod(prec, 3).eq.1) then
+            stp = farr(1,1) - farr(0,1)
+            do i = 0, prec-4, 3
+                next = (3*stp/8)*(farr(i,2)+3*farr(i+1,2)+3*farr(i+2,2)+farr(i+3,2)) - er
+                sres = discrItgr + next
+                er = (sres - discrItgr) - next
+                discrItgr = sres
+            end do
+            do i = prec-4, prec, 2
+                next = (stp/3)*(farr(i,2)+4*farr(i+1,2)+farr(i+2,2)) - er
+                sres = discrItgr + next
+                er = (sres - discrItgr) - next
+                discrItgr = sres
+            end do
+
+            stp = farr(prec+1,1) - farr(prec,1)
+            do i = prec, 2*prec-4, 3
+                next = (3*stp/8)*(farr(i,2)+3*farr(i+1,2)+3*farr(i+2,2)+farr(i+3,2)) - er
+                sres = discrItgr + next
+                er = (sres - discrItgr) - next
+                discrItgr = sres
+            end do
+            do i = 2*prec-4, 2*prec, 2
+                next = (stp/3)*(farr(i,2)+4*farr(i+1,2)+farr(i+2,2)) - er
+                sres = discrItgr + next
+                er = (sres - discrItgr) - next
+                discrItgr = sres
+            end do
+        elseif (mod(prec, 3).eq.2) then
+            stp = farr(1,1) - farr(0,1)
+            do i = 0, prec-2, 3
+                next = (3*stp/8)*(farr(i,2)+3*farr(i+1,2)+3*farr(i+2,2)+farr(i+3,2)) - er
+                sres = discrItgr + next
+                er = (sres - discrItgr) - next
+                discrItgr = sres
+            end do
+            do i = prec-2, prec, 2
+                next = (stp/3)*(farr(i,2)+4*farr(i+1,2)+farr(i+2,2)) - er
+                sres = discrItgr + next
+                er = (sres - discrItgr) - next
+                discrItgr = sres
+            end do
+
+            stp = farr(prec+1,1) - farr(prec,1)
+            do i = prec, 2*prec-2, 3
+                next = (3*stp/8)*(farr(i,2)+3*farr(i+1,2)+3*farr(i+2,2)+farr(i+3,2)) - er
+                sres = discrItgr + next
+                er = (sres - discrItgr) - next
+                discrItgr = sres
+            end do
+            do i = 2*prec-2, 2*prec, 2
+                next = (stp/3)*(farr(i,2)+4*farr(i+1,2)+farr(i+2,2)) - er
+                sres = discrItgr + next
+                er = (sres - discrItgr) - next
+                discrItgr = sres
+            end do
+        end if
+    end function discrItgr
 
 end program main
