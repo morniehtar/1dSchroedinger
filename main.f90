@@ -1,6 +1,4 @@
-!Поиск корней
 !Нормировка в.ф.
-!Отрисовка в.ф.
 
 module config
     implicit none
@@ -76,9 +74,10 @@ program main
     use potent
     implicit none
 
-    real(8) :: erg, stp
+
     real(8) :: bt, tp, estep
     real(8), dimension(:), allocatable :: stErg
+    real(8), dimension(0:2*prec, 2) :: WF
 
     integer :: i
 
@@ -95,14 +94,7 @@ program main
     !^^^^^^^^^^^^^^^
 
 ! Drawing cnd(erg)
-    stp = (einf-enou)/dots
-    open(unit = 1, file = "cndPlot.dat")
-    do i = 1, dots+1
-        erg = -einf + (i-1)*stp
-        write(1, *) erg, cndPtr(erg)
-    end do
-    close(1)
-    print *, "Cnd(erg) is drawn"
+    call drawCND()
 
 ! Searching stationary levels
     allocate(stErg(0))
@@ -113,6 +105,13 @@ program main
         call getRoot(cndPtr, bt, tp, stErg)
     end do
 
+! WFscratch output (temporary)
+    WF=getWF(stErg(1))
+    open(unit = 1, file = "wfscratch.dat")
+    do i = 0, 2*prec
+        write(1,*) WF(i, 1), WF(i, 2)
+    end do
+    close(1)
 
     deallocate(stErg)
 contains
@@ -185,10 +184,10 @@ contains
 
         step = (xcrs + xinf) / prec
 
-        !open(unit = 1, file = "rkLeft.dat")
+
         do i = 1, prec+1
             x = -xinf + (i-1)*step
-            !write(1,*) x, yleft, zleft
+
             k(1) = fptr(x, yleft, zleft, nrg)
             l(1) = gptr(x, yleft, zleft, nrg)
 
@@ -205,7 +204,6 @@ contains
             zleft = zleft + step*(l(1)+2*l(2)+2*l(3)+l(4))/6
 
         end do
-        !close(1)
 
     end subroutine integL
 
@@ -235,10 +233,10 @@ contains
 
         step = (xinf - xcrs) / prec
 
-        !open(unit = 1, file = "rkRight.dat")
+
         do i = 1, prec+1
             x = xinf - (i-1)*step
-            !write(1,*) x, yright, zright
+
             k(1) = fptr(x, yright, zright, nrg)
             l(1) = gptr(x, yright, zright, nrg)
 
@@ -255,7 +253,6 @@ contains
             zright = zright - step*(l(1)+2*l(2)+2*l(3)+l(4))/6
 
         end do
-        !close(1)
 
     end subroutine integR
 
@@ -297,12 +294,10 @@ contains
         implicit none
         real(8), dimension(:), intent(inout), allocatable :: arr
 
-
         real(8), dimension(size(arr)) :: tmp
         integer :: j, k
 
         k = size(arr)
-
         do j = 1, k
             tmp(j) = arr(j)
         end do
@@ -314,5 +309,103 @@ contains
             arr(j) = tmp(j)
         end do
     end subroutine ext
+
+    subroutine drawCND()
+        implicit none
+        real(8) :: erg, stp
+
+        stp = (einf-enou)/dots
+        open(unit = 1, file = "cndPlot.dat")
+        do i = 1, dots+1
+            erg = -einf + (i-1)*stp
+            write(1, *) erg, cndPtr(erg)
+        end do
+        close(1)
+
+        print *, "Cnd(erg) is drawn"
+    end subroutine drawCND
+
+    function getWF(nrg)
+        implicit none
+        real(8), intent(in) :: nrg
+        real(8), dimension(0:2*prec,2) :: getWF
+
+        abstract interface
+            real(8) function fct(x, y, z, nrg)
+            real(8), intent(in) :: x, y, z, nrg
+            end function fct
+        end interface
+
+        procedure(fct), pointer :: fptr, gptr
+        real(8), dimension(4) :: k, l
+        real(8) :: arg, stp, zstore, ystore, C
+        integer :: i
+
+        fptr => func
+        gptr => gunc
+
+    ! Drawing WF scratch
+        getWF(0,2) = exp(-sqrt(-2.d0*nrg)*xinf)
+        zstore = sqrt(-2.d0*nrg)*exp(-sqrt(-2.d0*nrg)*xinf)
+
+        stp = (xcrs + xinf) / prec
+        do i = 0, prec
+            getWF(i,1) = -xinf + i*stp
+
+            k(1) = fptr(getWF(i,1), getWF(i,2), zstore, nrg)
+            l(1) = gptr(getWF(i,1), getWF(i,2), zstore, nrg)
+
+            k(2) = fptr(getWF(i,1)+stp/2, getWF(i,2)+k(1)*stp/2, zstore+k(1)*stp/2, nrg)
+            l(2) = gptr(getWF(i,1)+stp/2, getWF(i,2)+l(1)*stp/2, zstore+l(1)*stp/2, nrg)
+
+            k(3) = fptr(getWF(i,1)+stp/2, getWF(i,2)+k(2)*stp/2, zstore+k(2)*stp/2, nrg)
+            l(3) = gptr(getWF(i,1)+stp/2, getWF(i,2)+l(2)*stp/2, zstore+l(2)*stp/2, nrg)
+
+            k(4) = fptr(getWF(i,1)+stp, getWF(i,2)+k(3)*stp, zstore+k(3)*stp, nrg)
+            l(4) = gptr(getWF(i,1)+stp, getWF(i,2)+l(3)*stp, zstore+l(3)*stp, nrg)
+
+            if (i.ne.prec) getWF(i+1,2) = getWF(i,2) + stp*(k(1)+2*k(2)+2*k(3)+k(4))/6
+            zstore = zstore + stp*(l(1)+2*l(2)+2*l(3)+l(4))/6
+        end do
+
+        getWF(2*prec,2) = exp(-sqrt(-2.d0*nrg)*xinf)
+        zstore = -sqrt(-2.d0*nrg)*exp(-sqrt(-2.d0*nrg)*xinf)
+
+        stp = (xinf - xcrs) / prec
+        do i = 2*prec, prec, -1
+            getWF(i,1) = xinf - (2*prec-i)*stp
+
+            k(1) = fptr(getWF(i,1), getWF(i,2), zstore, nrg)
+            l(1) = gptr(getWF(i,1), getWF(i,2), zstore, nrg)
+
+            k(2) = fptr(getWF(i,1)-stp/2, getWF(i,2)-k(1)*stp/2, zstore-k(1)*stp/2, nrg)
+            l(2) = gptr(getWF(i,1)-stp/2, getWF(i,2)-l(1)*stp/2, zstore-l(1)*stp/2, nrg)
+
+            k(3) = fptr(getWF(i,1)-stp/2, getWF(i,2)-k(2)*stp/2, zstore-k(2)*stp/2, nrg)
+            l(3) = gptr(getWF(i,1)-stp/2, getWF(i,2)-l(2)*stp/2, zstore-l(2)*stp/2, nrg)
+
+            k(4) = fptr(getWF(i,1)-stp, getWF(i,2)-k(3)*stp, zstore-k(3)*stp, nrg)
+            l(4) = gptr(getWF(i,1)-stp, getWF(i,2)-l(3)*stp, zstore-l(3)*stp, nrg)
+
+            if (i.ne.(prec+1)) then
+                getWF(i-1,2) = getWF(i,2) - stp*(k(1)+2*k(2)+2*k(3)+k(4))/6
+            else if (i.eq.(prec+1)) then
+                ystore = getWF(i,2) - stp*(k(1)+2*k(2)+2*k(3)+k(4))/6
+            end if
+            zstore = zstore - stp*(l(1)+2*l(2)+2*l(3)+l(4))/6
+
+        end do
+
+    ! Scratch continuity fixing
+        C = getWF(prec,2)/ystore
+        do i = prec, 2*prec
+            getWF(i,2) = getWF(i,2)*C
+        end do
+
+    ! Scratch normalization fixing
+        ! (Yet to be added)
+
+        print*, "WF is drawn"
+    end function getWF
 
 end program main
