@@ -7,8 +7,6 @@ set tics out
 set grid
 set nokey
 
-set samples 10000
-
 set style line 1 lt rgb "#ff0000" lw 1.5 #Scarlet, thick
 
 plot "./cndPlot.dat" using 1:2 smooth csplines linestyle 1
