@@ -14,7 +14,7 @@ module config
     !Machine epsilon (bisection limiter)
     real(8), parameter :: eps = 1.d-9
     !Energy search width
-    real(8), parameter :: estep = 1.d0
+    real(8), parameter :: eprec = 1.d0
 !---------------------------------------------------------------
 end module config
 
@@ -59,29 +59,49 @@ program main
     use potent
     implicit none
 
+    !Placeholders for function values around cross-section
     real(8) :: yleft, zleft, yright, zright
-    real(8) :: erg
+    !Energy handling variables
+    real(8) :: erg, estep
+    !Bisection variables
+    real(8) :: bt, md, tp
+    integer :: i, lim
 
-    erg = -0.592d0
+    estep = einf/eprec
 
+    do i = 1, eprec+1
+        bt = -einf + (i-1)*estep
+        tp = -einf + i*estep
+        md = (tp + bt) / 2
+        do while (1==0)
+
+        end do
+
+    end do
     call integL(erg, yleft, zleft)
     call integR(erg, yright, zright)
 
-    print *, getLog(yleft, zleft, yright, zright)
+    print *, cndWron(-0.5d0)
 
 contains
 
-    pure real(8) function getWron(yleft, zleft, yright, zright)
+    real(8) function cndLog(nrg)
         implicit none
-        real(8), intent(in) :: yleft, zleft, yright, zright
-        getWron = yleft*zright - zleft*zright
-    end function getWron
+        real(8), intent(in) :: nrg
+        real(8) :: yleft, zleft, yright, zright
+        call integL(nrg, yleft, zleft)
+        call integR(nrg, yright, zright)
+        cndLog = zright/yright - zleft/yleft
+    end function cndLog
 
-    pure real(8) function getLog(yleft, zleft, yright, zright)
+    real(8) function cndWron(nrg)
         implicit none
-        real(8), intent(in) :: yleft, zleft, yright, zright
-        getLog = zright/yright - zleft/yleft
-    end function getLog
+        real(8), intent(in) :: nrg
+        real(8) :: yleft, zleft, yright, zright
+        call integL(nrg, yleft, zleft)
+        call integR(nrg, yright, zright)
+        cndWron = yleft*zright - zleft*zright
+    end function cndWron
 
     !y'=func(x, y, z); y = psi
     !z'=gunc(x, y, z); zdx = dpsi
@@ -187,4 +207,4 @@ contains
 
     end subroutine integR
 
-end program
+end program main
