@@ -1,17 +1,29 @@
 #! /usr/bin/gnuplot
 
-set term qt font "arial,12" enhanced #persist
+set term qt font "arial,12" enhanced
 set encoding utf8
 set tmargin 1
 set tics out
 set grid
-set nokey
 
 set samples 10000    # x-axis
 set isosamples 10000 # y-axis
 
-set style line 1 lt rgb "#ff0000" lw 1.5 #Scarlet, thick
+set colorsequence podo
 
-plot "./wfscratch.dat" using 1:2 smooth csplines linestyle 1
+plot "./k01wfData.dat" using 1:2 smooth csplines, \
+"./k02wfData.dat" using 1:2 smooth csplines, \
+"./k03wfData.dat" using 1:2 smooth csplines, \
+"./k04wfData.dat" using 1:2 smooth csplines, \
+"./k05wfData.dat" using 1:2 smooth csplines, \
+"./k06wfData.dat" using 1:2 smooth csplines, \
+"./k07wfData.dat" using 1:2 smooth csplines, \
+"./k08wfData.dat" using 1:2 smooth csplines, \
+"./k09wfData.dat" using 1:2 smooth csplines, \
+"./k10wfData.dat" using 1:2 smooth csplines, \
+"./k11wfData.dat" using 1:2 smooth csplines, \
+"./k12wfData.dat" using 1:2 smooth csplines, \
+"./k13wfData.dat" using 1:2 smooth csplines
+
 
 pause mouse close

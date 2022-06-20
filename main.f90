@@ -15,11 +15,11 @@ module config
     real(8), parameter :: xcrs = -0.456d0
 !---------------------------------------------------------------
 ! Energy effective infinity
-    real(8), parameter :: einf = 40d0 ! >0
+    real(8), parameter :: einf = 10d0 ! >0
 ! Energy effective nought
     real(8), parameter :: enou = 4d-3 ! >0; 4d-3 for U1; 5d-2 generally
 ! Machine epsilon (root search limiter)
-    real(8), parameter :: eps = 1d-8 ! 1d-16 is machine epsilon
+    real(8), parameter :: eps = 1d-16 ! 1d-16 is machine epsilon
 ! Machine infinity (WF normalization upper limiter)
     real(8), parameter :: omg = 1d+300 ! 1d+308 is machine infinity
 ! Energy search precision
@@ -37,12 +37,11 @@ module potent
         end function ufct
     end interface
 
-    procedure(U0), pointer :: uptr => U1
+    procedure(U0), pointer :: uptr => U0
 
     real(8), parameter :: u = 10d0
     !real(8), parameter :: u = 2d0
     !real(8), parameter :: u = 1.1d0
-
 
 contains
 
@@ -78,7 +77,7 @@ program main
     real(8), dimension(:), allocatable :: stErg
     real(8), dimension(0:2*prec, 2) :: WF
 
-    integer :: i
+    integer :: i, j
 
     abstract interface
         real(8) function cnd(nrg)
@@ -87,6 +86,7 @@ program main
     end interface
 
     procedure(cnd), pointer :: cndPtr
+    character(len=13) :: name = "k??wfData.dat"
 
     !vvvvvvvvvvvvvvv
     cndPtr => cndWron
@@ -105,12 +105,15 @@ program main
     end do
 
 ! WF output
-    WF=getWF(stErg(4))
-    open(unit = 1, file = "wfscratch.dat")
-    do i = 0, 2*prec
-        write(1,*) WF(i, 1), WF(i, 2)
+    do j = 1, size(stErg)
+        WF=getWF(stErg(j))
+        write(unit=name(2:3), fmt="(i2.2)") j
+        open(unit = 1, file = name)
+        do i = 0, 2*prec
+            write(1,*) WF(i, 1), WF(i, 2)
+        end do
+        close(1)
     end do
-    close(1)
 
     deallocate(stErg)
 contains
@@ -365,6 +368,7 @@ contains
                 do j = 0, i
                     getWF(j,2) = getWF(j,2)/getWF(i,2)
                 end do
+                zstore = zstore/getWF(i,2)
 
                 k(1) = fptr(getWF(i,1), getWF(i,2), zstore, nrg)
                 l(1) = gptr(getWF(i,1), getWF(i,2), zstore, nrg)
@@ -406,6 +410,7 @@ contains
                 do j = 2*prec, i, -1
                     getWF(j,2) = getWF(j,2)/getWF(i,2)
                 end do
+                zstore = zstore/getWF(i,2)
 
                 k(1) = fptr(getWF(i,1), getWF(i,2), zstore, nrg)
                 l(1) = gptr(getWF(i,1), getWF(i,2), zstore, nrg)
